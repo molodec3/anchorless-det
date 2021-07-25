@@ -65,11 +65,11 @@ def center_net_loss(
         downsampling_ratio=4
 ):
     """
-    :param pred_heatmap:
-    :param pred_offset:
-    :param pred_size:
-    :param mask:
-    :param size_tensor:
+    :param pred_heatmap: predicted heatmap size batch_size x num_classes x H x W
+    :param pred_offset: predicted offset size batch_size x num_classes x H x W
+    :param pred_size: predicted size size batch_size x num_classes x H x W
+    :param mask: real mask size batch batch_size x num_classes x (H * R) x (W * R)
+    :param size_tensor: real box size batch_size x 2 x H x W
     :param alpha:
     :param beta:
     :param lambd_offset:
@@ -92,10 +92,14 @@ def center_net_loss(
     ])
     mask_strided[idxs_strided] = 1
 
-    focal = focal_loss(pred_heatmap, make_heatmap(mask_strided), alpha, beta)
+    # sigmoid to have values in [0, 1]
+    focal = focal_loss(torch.sigmoid(pred_heatmap), make_heatmap(mask_strided), alpha, beta)
+
+    # merged mask without respect to classes for size and offset
+    merged_mask = (mask_strided.sum(dim=1)[:, None, :, :] > 0).float().repeat(1, 2, 1, 1)
 
     real_offsets = torch.zeros([
-        mask.shape[0], mask.shape[1],
+        mask.shape[0], 2,
         mask.shape[2] // downsampling_ratio,
         mask.shape[3] // downsampling_ratio
     ])
@@ -104,8 +108,8 @@ def center_net_loss(
     real_offsets[:, 1, idxs_strided[2], idxs_strided[3]] = \
         idxs[3] / downsampling_ratio - idxs_strided[3]
 
-    offset = offset_loss(pred_offset, real_offsets, mask_strided)
+    offset = offset_loss(pred_offset, real_offsets, merged_mask)
 
-    size = size_loss(pred_size, size_tensor, mask_strided)
+    size = size_loss(pred_size, size_tensor, merged_mask)
 
     return focal + lambd_offset * offset + lambd_size * size
