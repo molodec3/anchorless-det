@@ -7,17 +7,18 @@ from utils import make_heatmap
 EPS = 1e-6
 
 
-def focal_loss(pred, truth, alpha, beta):
+def focal_loss(pred, truth, mask, alpha, beta):
     """
     :param pred: model prediction heatmap batch_size x classes x H x W
     :param truth: ground truth heatmap batch_size x classes x H x W
+    :param mask: truth mask batch_size x classes x H x W
     :param alpha: hyper parameter alpha
     :param beta: hyper parameter beta
     :return: focal loss
     """
 
-    pos_labels = truth == 1
-    neg_labels = truth != 1
+    pos_labels = mask == 1
+    neg_labels = mask != 1
 
     loss = torch.pow(1 - pred, alpha) * torch.log(pred) * pos_labels
     loss += torch.pow(1 - truth, beta) * torch.pow(pred, alpha) * torch.log(1 - pred) * neg_labels
@@ -64,10 +65,10 @@ def center_net_loss(
         downsampling_ratio=4
 ):
     """
-    :param pred_heatmap: predicted heatmap size batch_size x num_classes x H x W
-    :param pred_offset: predicted offset size batch_size x num_classes x H x W
-    :param pred_size: predicted size size batch_size x num_classes x H x W
-    :param mask: real mask size batch batch_size x num_classes x (H * R) x (W * R)
+    :param pred_heatmap: predicted heatmap batch_size x num_classes x H x W
+    :param pred_offset: predicted offset batch_size x num_classes x H x W
+    :param pred_size: predicted size batch_size x num_classes x H x W
+    :param mask: real mask batch_size x num_classes x (H * R) x (W * R)
     :param size_tensor: real box size batch_size x 2 x H x W, 0 dim for y, 1 dim for x
     :param alpha:
     :param beta:
