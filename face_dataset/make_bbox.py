@@ -218,15 +218,15 @@ def preprocess_celeba(path_files, path_annotations, path_out,
 if __name__ == '__main__':
     preprocess_helen('helen/helen_1',
                      'helen/annotation',
-                     'helen/coco_annotation.txt',
+                     'helen/pascal_annotation.txt',
                      padding_eye=(0.1, 0.3), padding_mouth=0.1, show_test=True)
 
     preprocess_fgnet('fg_net/images',
                      'fg_net/points',
-                     'fg_net/coco_annotation.txt',
+                     'fg_net/pascal_annotation.txt',
                      padding_eye=(0.1, 0.3), padding_mouth=0.1, show_test=True)
 
     preprocess_celeba('celeba/img_align_celeba',
                       'celeba/landmark_align.txt',
-                      'celeba/coco_annotation.txt',
+                      'celeba/pascal_annotation.txt',
                       padding_eye=(0.1, 0.4), padding_mouth=0.1, show_test=True)
