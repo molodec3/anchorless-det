@@ -51,6 +51,7 @@ class CenterNet(nn.Module):
         out = self.deconv_l3(torch.cat([inp2, out], dim=1))
         out = self.pred(torch.cat([inp1, out], dim=1))
 
-        return out[:, :self.n_classes], \
+        # sigmoid to have values in [0, 1]
+        return torch.sigmoid(out[:, :self.n_classes]), \
             out[:, self.n_classes:-2], \
             out[:, -2:]

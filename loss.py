@@ -102,8 +102,7 @@ def center_net_loss(
     real_offsets[:, 1, idxs_strided[2], idxs_strided[3]] = \
         idxs[3] / downsampling_ratio - idxs_strided[3]
 
-    # sigmoid to have values in [0, 1]
-    focal = focal_loss(torch.sigmoid(pred_heatmap), make_heatmap(mask_strided, size_tensor), alpha, beta)
+    focal = focal_loss(pred_heatmap, make_heatmap(mask_strided, size_tensor), mask_strided, alpha, beta)
 
     # merged mask without respect to classes for size and offset
     merged_mask = (mask_strided.sum(dim=1)[:, None, :, :] > 0).float().repeat(1, 2, 1, 1)
