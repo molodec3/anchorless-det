@@ -90,10 +90,10 @@ class CenterFaceDataset(Dataset):
         size = torch.zeros(2, img.shape[1], img.shape[2])
         for (x_min, y_min, x_max, y_max), c in zip(transformed['bboxes'], transformed['class_labels']):
             center_x, center_y = (x_min + x_max) / 2, (y_min + y_max) / 2
-            mask[self.classes_idxs[c], center_x, center_y] = 1
+            mask[self.classes_idxs[c], center_y, center_x] = 1
             # check if x is 0 dim and y is 1 dim
-            size[0, center_x, center_y] = x_max - x_min
-            size[1, center_x, center_y] = y_max - y_min
+            size[0, center_y, center_x] = x_max - x_min
+            size[1, center_y, center_x] = y_max - y_min
 
         return img, mask, size
         # return only image, non-strided mask, size tensor
