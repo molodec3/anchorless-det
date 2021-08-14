@@ -72,6 +72,8 @@ def preprocess_helen(path_files, path_annotations, path_out,
         y_min_mouth = max(y_min_mouth - y_pad * y_dist_mouth, 0)
 
         with open(path_out, 'w' if k == 0 else 'a') as f:
+            if k == 0:
+                f.write('name,class,x_min,y_min,x_max,y_max\n')
             f.write(f'{c_file},eyes,{x_min_eye},{y_min_eye},{x_max_eye},{y_max_eye}\n')
             f.write(f'{c_file},mouth,{x_min_mouth},{y_min_mouth},{x_max_mouth},{y_max_mouth}\n')
 
@@ -150,6 +152,8 @@ def preprocess_fgnet(path_files, path_annotations, path_out,
         y_min_mouth = max(y_min_mouth - y_pad * y_dist_mouth, 0)
 
         with open(path_out, 'w' if k == 0 else 'a') as f:
+            if k == 0:
+                f.write('name,class,x_min,y_min,x_max,y_max\n')
             f.write(f'{c_file},eyes,{x_min_eye},{y_min_eye},{x_max_eye},{y_max_eye}\n')
             f.write(f'{c_file},mouth,{x_min_mouth},{y_min_mouth},{x_max_mouth},{y_max_mouth}\n')
 
@@ -204,7 +208,7 @@ def preprocess_celeba(path_files, path_annotations, path_out,
 
             with open(path_out, 'w' if i == 0 else 'a') as f:
                 if i == 0:
-                    f.write('name,class,x_min,y_min,x_max,y_max')
+                    f.write('name,class,x_min,y_min,x_max,y_max\n')
                 f.write(f'{c_file.split(".")[0]},eyes,{x_min_eye},{y_min_eye},{x_max_eye},{y_max_eye}\n')
                 f.write(f'{c_file.split(".")[0]},mouth,{x_min_mouth},{y_min_mouth},{x_max_mouth},{y_max_mouth}\n')
 
@@ -218,17 +222,17 @@ def preprocess_celeba(path_files, path_annotations, path_out,
 
 
 if __name__ == '__main__':
-    preprocess_helen('helen/helen_1',
-                     'helen/annotation',
-                     'helen/pascal_annotation.csv',
+    preprocess_helen('../data/helen/helen_1',
+                     '../data/helen/annotation',
+                     '../data/helen/pascal_annotation.csv',
                      padding_eye=(0.1, 0.3), padding_mouth=0.1, show_test=True)
 
-    preprocess_fgnet('fg_net/images',
-                     'fg_net/points',
-                     'fg_net/pascal_annotation.csv',
+    preprocess_fgnet('../data/fg_net/images',
+                     '../data/fg_net/points',
+                     '../data/fg_net/pascal_annotation.csv',
                      padding_eye=(0.1, 0.3), padding_mouth=0.1, show_test=True)
 
-    preprocess_celeba('celeba/img_align_celeba',
-                      'celeba/landmark_align.txt',
-                      'celeba/pascal_annotation.csv',
+    preprocess_celeba('../data/celeba/img_align_celeba',
+                      '../data/celeba/landmark_align.txt',
+                      '../data/celeba/pascal_annotation.csv',
                       padding_eye=(0.1, 0.4), padding_mouth=0.1, show_test=True)

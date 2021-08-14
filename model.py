@@ -52,6 +52,7 @@ class CenterNet(nn.Module):
         out = self.pred(torch.cat([inp1, out], dim=1))
 
         # sigmoid to have values in [0, 1]
+        # returns heatmap, offsets, sizes
         return torch.sigmoid(out[:, :self.n_classes]), \
             out[:, self.n_classes:-2], \
             out[:, -2:]

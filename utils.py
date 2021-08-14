@@ -1,3 +1,4 @@
+import matplotlib.pyplot as plt
 import torch
 import numpy as np
 
@@ -29,11 +30,11 @@ def make_heatmap(mask, size_tensor):
         x_mean, y_mean = (x_min + x_max) // 2, (y_min + y_max) // 2
 
         y_grid, x_grid = np.ogrid[
-                         y_min-y_mean:y_max-y_mean+1, x_min-x_mean:x_max-x_mean+1
+                         y_min - y_mean:y_max - y_mean + 1, x_min - x_mean:x_max - x_mean + 1
                          ]
-        c_mask = np.exp(-(x_grid**2 + y_grid**2) / (2 * r**2))
-        res_mask[b, c, y_min:y_max+1, x_min:x_max+1] = np.maximum(
-            c_mask, res_mask[b, c, y_min:y_max+1, x_min:x_max+1]
+        c_mask = np.exp(-(x_grid ** 2 + y_grid ** 2) / (2 * r ** 2))
+        res_mask[b, c, y_min:y_max + 1, x_min:x_max + 1] = np.maximum(
+            c_mask, res_mask[b, c, y_min:y_max + 1, x_min:x_max + 1]
         )
         # res_mask[b, c, y, x] = 1
     return res_mask
@@ -42,3 +43,29 @@ def make_heatmap(mask, size_tensor):
 def find_radius(w, h, min_iou=0.7):
     c_min = min(w, h)
     return (1 - min_iou) * c_min / (1 + min_iou)
+
+
+def visualize_heatmap(dataset, idx=None):
+    if idx is None:
+        idx = np.random.randint(0, len(dataset))
+
+    im, mask, size = dataset[idx]
+    heatmap = make_heatmap(mask.unsqueeze(0), size.unsqueeze(0))
+    plt.subplot(1, 2, 1)
+    plt.imshow(im.permute(1, 2, 0))
+    plt.subplot(1, 2, 2)
+    plt.imshow(heatmap.squeeze(0).sum(dim=0))
+    plt.show()
+
+
+def visualize_prediction(pred):
+    pass
+
+
+if __name__ == '__main__':
+    from face_dataset.dataset import CenterFaceDataset
+
+    ds = CenterFaceDataset(helen_path='./data/helen/helen_1',
+                           fgnet_path='./data/fg_net/images',
+                           celeba_path='./data/celeba/img_align_celeba')
+    visualize_heatmap(ds, 1000)
