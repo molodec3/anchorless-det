@@ -63,9 +63,12 @@ def visualize_prediction(pred):
 
 
 if __name__ == '__main__':
-    from face_dataset.dataset import CenterFaceDataset
+    from face_dataset.dataset import CenterFaceDataset, center_face_train_test_split
 
-    ds = CenterFaceDataset(helen_path='./data/helen/helen_1',
-                           fgnet_path='./data/fg_net/images',
-                           celeba_path='./data/celeba/img_align_celeba')
+    train_files, test_files, df = center_face_train_test_split(
+        helen_path='./data/helen/helen_1',
+        fgnet_path='./data/fg_net/images',
+        celeba_path='./data/celeba/img_align_celeba'
+    )
+    ds = CenterFaceDataset(train_files, df)
     visualize_heatmap(ds, 1000)
