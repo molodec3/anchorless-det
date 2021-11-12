@@ -56,6 +56,31 @@ def visualize_heatmap(dataset, idx=None):
     plt.subplot(1, 2, 2)
     plt.imshow(heatmap.squeeze(0).sum(dim=0))
     plt.show()
+    
+    
+def make_bin_mask(pred, im_shape):
+    out = torch.zeros(im_shape)
+    for b, c, x_min, y_min, x_max, y_max in pred:
+        out[int(b), int(c), int(y_min):int(y_max), int(x_min):int(x_max)] = 1
+    
+    return out
+
+
+def make_bboxes(pred, im_shape):
+    out = torch.zeros(im_shape)
+    for b, c, x_min, y_min, x_max, y_max in pred:
+        out[int(b), int(c), int(y_min):int(y_max), int(x_min)] = 1
+        out[int(b), int(c), int(y_min):int(y_max), int(x_max)] = 1
+        out[int(b), int(c), int(y_min), int(x_min):int(x_max)] = 1
+        out[int(b), int(c), int(y_max), int(x_min):int(x_max)] = 1
+        
+    return out
+
+
+def calculate_iou(true_mask, pred_mask):
+    inter = (true_mask * pred_mask > 0).sum()
+    union = (true_mask + pred_mask > 0).sum()
+    return inter / union
 
 
 def visualize_prediction(pred):

@@ -1,3 +1,4 @@
+import numpy as np
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
@@ -6,10 +7,15 @@ from torchvision import models
 
 
 class CenterNet(nn.Module):
-    def __init__(self, n_classes, resnet=18, pretrained=False):
+    def __init__(
+        self, n_classes, 
+        resnet=18, pretrained=False,
+        device='cuda' if torch.cuda.is_available() else 'cpu'
+    ):
         super(CenterNet, self).__init__()
 
         self.n_classes = n_classes
+        self.device = device
 
         if resnet == 18:
             backbone = models.resnet18(pretrained=pretrained)
@@ -56,3 +62,63 @@ class CenterNet(nn.Module):
         return torch.sigmoid(out[:, :self.n_classes]), \
             out[:, self.n_classes:-2], \
             out[:, -2:]
+    
+    def predict(
+        self, inp, 
+        thr=0.5, num_peaks=100, 
+        downsampling_ratio=4,
+    ):
+        hm, offset, size = self.forward(inp)
+        
+        b, c, h, w = hm.shape
+        
+        kernel = 3
+        pad = (kernel - 1) // 2
+        hmax = nn.functional.max_pool2d(
+            hm, (kernel, kernel), stride=1, padding=pad
+        )
+        keep = (hmax == hm).float()
+        hm = keep * hm
+        
+        peaks, p_idxs = torch.topk(hm.flatten(-3), num_peaks)
+        stacked = torch.arange(b).reshape(-1, 1)
+        stacked = stacked.repeat(1, num_peaks).reshape(-1, 1)
+        
+        indices = tuple(
+            torch.cat(
+                [stacked, p_idxs.reshape(-1, 1)], dim=-1
+            )[peaks.reshape(-1, ) > thr].T
+        )
+        
+        unraveled = np.unravel_index(indices[1].cpu().detach().numpy(), (c, h, w))
+        classes, ys, xs = unraveled
+        
+        # add offset and find size of x and y
+        ys_idxs = (
+            indices[0], torch.zeros(indices[0].shape, dtype=int).to(self.device), 
+            torch.tensor(ys).to(self.device), torch.tensor(xs).to(self.device)
+        )
+        xs_idxs = (
+            indices[0], torch.ones(indices[0].shape, dtype=int).to(self.device), 
+            torch.tensor(ys).to(self.device), torch.tensor(xs).to(self.device)
+        )
+        
+        upd_ys = torch.tensor(ys).to(self.device) + offset[ys_idxs]
+        upd_xs = torch.tensor(xs).to(self.device) + offset[xs_idxs]
+                
+        lower_ys = upd_ys - size[ys_idxs] / 2
+        upper_ys = upd_ys + size[ys_idxs] / 2
+        lower_xs = upd_xs - size[xs_idxs] / 2
+        upper_xs = upd_xs + size[xs_idxs] / 2
+        
+        # returns tensor with shape [bs * n_peaks, 6]
+        # containing [batch_num, class_num, x_min, y_min, x_max, y_max]
+        print(indices[0].shape, torch.tensor(classes).to(self.device).shape, lower_xs.shape)
+        return torch.cat([
+            indices[0].reshape(-1, 1), 
+            torch.tensor(classes).to(self.device).reshape(-1, 1), 
+            4 * lower_xs.reshape(-1, 1), 
+            4 * lower_ys.reshape(-1, 1), 
+            4 * upper_xs.reshape(-1, 1), 
+            4 * upper_ys.reshape(-1, 1)
+        ], dim=-1)

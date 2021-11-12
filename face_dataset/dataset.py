@@ -18,9 +18,11 @@ from sklearn.model_selection import train_test_split
 
 class CenterFaceDataset(Dataset):
     def __init__(
-            self, files, df, dataset_limit=5000
+            self, files, df, dataset_limit=5000, bin_mask=False
     ):
         self.plot_im = False  # for debug mostly
+        
+        self.bin_mask = bin_mask  # for val
 
         self.transform = A.Compose(
             [
@@ -47,7 +49,7 @@ class CenterFaceDataset(Dataset):
 
     def __getitem__(self, idx):
         file = self.files[idx]
-        name = file.split('/')[-1].split('.')[0]
+        name = file.split('/')[-1].split('.')[0].lower()
         df = self.data_df.loc[name]
         img = cv2.imread(file)
         img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
@@ -79,16 +81,24 @@ class CenterFaceDataset(Dataset):
 
         img = transformed['image']
         mask = torch.zeros(self.n_classes, img.shape[1], img.shape[2])
+        if self.bin_mask:
+            bin_mask = torch.zeros(self.n_classes, img.shape[1], img.shape[2])
         size = torch.zeros(2, img.shape[1], img.shape[2])
         for (x_min, y_min, x_max, y_max), c in zip(transformed['bboxes'], transformed['class_labels']):
             center_x, center_y = int((x_min + x_max) // 2), int((y_min + y_max) / 2)
             mask[self.classes_idxs[c], center_y, center_x] = 1
+            if self.bin_mask:
+                bin_mask[self.classes_idxs[c], int(x_min):int(x_max), int(y_min):int(y_max)] = 1
             # y is 0 dim and x is 1 dim
             size[0, center_y, center_x] = y_max - y_min
             size[1, center_y, center_x] = x_max - x_min
 
-        return img, mask, size
+        # if bin_mask required than return bin_mask of bboxes instead of mask with centers
+        if self.bin_mask:
+            return img, mask, size, bin_mask
+
         # return only image, non-strided mask, size tensor
+        return img, mask, size
 
 
 def center_face_train_test_split(
@@ -118,11 +128,15 @@ def center_face_train_test_split(
     return train_files, test_files, df
 
 
-if __name__ == '__main__':
-    # ds = CenterFaceDataset()
-    a, b = center_face_train_test_split()
+def main_test():
+    a, b, df = center_face_train_test_split()
+    a = CenterFaceDataset(a, df)
+    b = CenterFaceDataset(b, df)
     a.plot_im = True
     b.plot_im = True
     print(len(a), len(b))
     a[100]
     b[200]
+
+if __name__ == '__main__':
+    main_test()
