@@ -6,6 +6,8 @@ from .utils import make_heatmap
 
 EPS = 1e-6
 
+torch.autograd.set_detect_anomaly(True)
+
 
 def focal_loss(pred, truth, mask, alpha, beta):
     """
@@ -108,7 +110,10 @@ def center_net_loss(
         mask.shape[2] // downsampling_ratio,
         mask.shape[3] // downsampling_ratio
     ]).to(device)
-    downsampled_size[idxs_strided] = size_tensor[idxs]
+    downsampled_size[idxs[0], 0, idxs_strided[2], idxs_strided[3]] = \
+        size_tensor[idxs[0], 0, idxs[2], idxs[3]].float() / downsampling_ratio
+    downsampled_size[idxs[0], 1, idxs_strided[2], idxs_strided[3]] = \
+        size_tensor[idxs[0], 1, idxs[2], idxs[3]].float() / downsampling_ratio
 
     focal = focal_loss(pred_heatmap, make_heatmap(mask_strided, size_tensor), mask_strided, alpha, beta)
 
@@ -118,5 +123,5 @@ def center_net_loss(
     offset = offset_loss(pred_offset, real_offsets, merged_mask)
 
     size = size_loss(pred_size, downsampled_size, merged_mask)
-
+    
     return focal + lambd_offset * offset + lambd_size * size

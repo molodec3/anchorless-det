@@ -11,6 +11,8 @@ def make_heatmap(mask, size_tensor):
     :param size_tensor: size_tensor size batch_size x 2 x H x W, 0 dim for y, 1 dim for x
     :return:
     """
+    mask = mask.to('cpu')
+    size_tensor = size_tensor.to('cpu')
     idxs = (mask == 1).nonzero(as_tuple=True)
     res_mask = torch.zeros(mask.shape)
 
@@ -36,8 +38,8 @@ def make_heatmap(mask, size_tensor):
         res_mask[b, c, y_min:y_max + 1, x_min:x_max + 1] = np.maximum(
             c_mask, res_mask[b, c, y_min:y_max + 1, x_min:x_max + 1]
         )
-        # res_mask[b, c, y, x] = 1
-    return res_mask
+        res_mask[b, c, y, x] = 1
+    return res_mask.to('cuda')
 
 
 def find_radius(w, h, min_iou=0.7):

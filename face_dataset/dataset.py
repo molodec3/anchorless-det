@@ -88,7 +88,7 @@ class CenterFaceDataset(Dataset):
             center_x, center_y = int((x_min + x_max) // 2), int((y_min + y_max) / 2)
             mask[self.classes_idxs[c], center_y, center_x] = 1
             if self.bin_mask:
-                bin_mask[self.classes_idxs[c], int(x_min):int(x_max), int(y_min):int(y_max)] = 1
+                bin_mask[self.classes_idxs[c], int(y_min):int(y_max), int(x_min):int(x_max)] = 1
             # y is 0 dim and x is 1 dim
             size[0, center_y, center_x] = y_max - y_min
             size[1, center_y, center_x] = x_max - x_min

@@ -59,9 +59,13 @@ class CenterNet(nn.Module):
 
         # sigmoid to have values in [0, 1]
         # returns heatmap, offsets, sizes
-        return torch.sigmoid(out[:, :self.n_classes]), \
+        return self._sigmoid(out[:, :self.n_classes]), \
             out[:, self.n_classes:-2], \
             out[:, -2:]
+    
+    def _sigmoid(self, x):
+        y = torch.clamp(x.sigmoid_(), min=1e-4, max=1-1e-4)
+        return y
     
     def predict(
         self, inp, 
@@ -81,7 +85,7 @@ class CenterNet(nn.Module):
         hm = keep * hm
         
         peaks, p_idxs = torch.topk(hm.flatten(-3), num_peaks)
-        stacked = torch.arange(b).reshape(-1, 1)
+        stacked = torch.arange(b).reshape(-1, 1).to(self.device)
         stacked = stacked.repeat(1, num_peaks).reshape(-1, 1)
         
         indices = tuple(
@@ -113,7 +117,6 @@ class CenterNet(nn.Module):
         
         # returns tensor with shape [bs * n_peaks, 6]
         # containing [batch_num, class_num, x_min, y_min, x_max, y_max]
-        print(indices[0].shape, torch.tensor(classes).to(self.device).shape, lower_xs.shape)
         return torch.cat([
             indices[0].reshape(-1, 1), 
             torch.tensor(classes).to(self.device).reshape(-1, 1), 
