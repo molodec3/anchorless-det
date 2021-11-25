@@ -1,5 +1,6 @@
 import time
 import torch
+import numpy as np
 from torch.utils.data import DataLoader
 from tqdm import tqdm
 
@@ -51,11 +52,13 @@ def train_cycle(
             loss.backward()
             optimizer.step()
             
-            train_epoch_loss += loss.cpu().data.numpy()
+#             train_epoch_loss += loss.cpu().data.numpy()
+            train_epoch_loss = loss.cpu().data.numpy()
             train_count += 1
             
-        train_loss.append(train_epoch_loss / train_count)
-        print(f'Epoch: {epoch + 1} of {epochs}\ntrain loss: {train_loss[-1]}\n'
+            train_loss.append(train_epoch_loss)
+#         train_loss.append(train_epoch_loss / train_count)
+        print(f'Epoch: {epoch + 1} of {epochs}\ntrain loss: {np.mean(train_loss[-train_count:])}\n'
               f'train time spent: {time.time() - start:.2f}')
 
         start = time.time()
@@ -76,16 +79,20 @@ def train_cycle(
                 pred = model.predict(img)  # make_bin_mask might not work due to different devices
                 iou = calculate_iou(bin_mask, make_bin_mask(pred, bin_mask.shape).to(device))
                 
-                val_epoch_loss += loss.cpu().data.numpy()
-                val_epoch_metric += iou.cpu().data.numpy()
+                val_epoch_loss = loss.cpu().data.numpy()
+                val_epoch_metric = iou.cpu().data.numpy()
+#                 val_epoch_loss += loss.cpu().data.numpy()
+#                 val_epoch_metric += iou.cpu().data.numpy()
                 val_count += 1
                 
-            val_loss.append(val_epoch_loss / val_count)
-            val_metric.append(val_epoch_metric / val_count)
-            print(f'val_loss: {val_loss[-1]}\nval_metric: {val_metric[-1]}\n'
-                  f'val time spent: {time.time() - start:.2f}')
+                val_loss.append(val_epoch_loss)
+                val_metric.append(val_epoch_metric)
+#             val_loss.append(val_epoch_loss / val_count)
+#             val_metric.append(val_epoch_metric / val_count)
+            print(f'val_loss: {np.mean(val_loss[-val_count:])}\nval_metric: {np.mean(val_metric[-val_count:])}\n'
+                  f'val time spent: {time.time() - start:.2f}\n')
             
-            if val_metric[-1] > best_metric:
+            if np.mean(val_metric[-val_count:]) > best_metric:
                 best_metric = val_metric[-1]
                 torch.save(model.state_dict(), f'{name}.pth')
                 print('Current model saved.\n')

@@ -18,7 +18,7 @@ from sklearn.model_selection import train_test_split
 
 class CenterFaceDataset(Dataset):
     def __init__(
-            self, files, df, dataset_limit=5000, bin_mask=False
+            self, files, df, bin_mask=False
     ):
         self.plot_im = False  # for debug mostly
         
@@ -111,9 +111,13 @@ def center_face_train_test_split(
     files = [f'{helen_path}/{f}' for f in helen_files]
     fgnet_files = os.listdir(fgnet_path)
     files.extend([f'{fgnet_path}/{f}' for f in fgnet_files])
-    celeba_size = max(dataset_limit - len(files), 0)
-    celeba_files = np.random.choice(os.listdir(celeba_path), celeba_size, replace=False).tolist()
+    if dataset_limit is not None:
+        celeba_size = max(dataset_limit - len(files), 0)
+        celeba_files = np.random.choice(os.listdir(celeba_path), celeba_size, replace=False).tolist()
+    else:
+        celeba_files = os.listdir(celeba_path)
     files.extend([f'{celeba_path}/{f}' for f in celeba_files])
+    print(f'Elements count: {len(files)}')
 
     helen_bbox = pd.read_csv(f'{helen_path}/../pascal_annotation.csv', dtype={'name': str})
     helen_bbox = helen_bbox.set_index('name')
