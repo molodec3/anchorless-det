@@ -13,6 +13,7 @@ from .utils import make_bin_mask, calculate_iou
 def train_cycle(
     model, optimizer, 
     train_data_gen, val_data_gen,# n_classes,
+    thr_val=0.5,
     epochs=100, name='centernet'
 ):
     train_loss = []
@@ -37,8 +38,9 @@ def train_cycle(
         
         model.train()
         start = time.time()
-        for img, mask, size in tqdm(train_data_gen):
+        for img, heatmap, mask, size in tqdm(train_data_gen):
             img = img.to(device)
+            heatmap = heatmap.to(device)
             mask = mask.to(device)
             size = size.to(device)
             optimizer.zero_grad()
@@ -46,7 +48,7 @@ def train_cycle(
             pred_hm, pred_offset, pred_size = model(img)
             loss = center_net_loss(
                 pred_hm, pred_offset, pred_size,
-                mask, size
+                heatmap, mask, size
             )
             
             loss.backward()
@@ -64,8 +66,9 @@ def train_cycle(
         start = time.time()
         model.eval()
         with torch.no_grad():
-            for img, mask, size, bin_mask in tqdm(val_data_gen):
+            for img, heatmap, mask, size, bin_mask in tqdm(val_data_gen):
                 img = img.to(device)
+                heatmap = heatmap.to(device)
                 mask = mask.to(device)
                 size = size.to(device)
                 bin_mask = bin_mask.to(device)
@@ -73,10 +76,10 @@ def train_cycle(
                 pred_hm, pred_offset, pred_size = model(img)
                 loss = center_net_loss(
                     pred_hm, pred_offset, pred_size,
-                    mask, size
+                    heatmap, mask, size
                 )
             
-                pred = model.predict(img)  # make_bin_mask might not work due to different devices
+                pred = model.predict(img, thr=thr_val)  # make_bin_mask might not work due to different devices
                 iou = calculate_iou(bin_mask, make_bin_mask(pred, bin_mask.shape).to(device))
                 
                 val_epoch_loss = loss.cpu().data.numpy()
@@ -89,11 +92,14 @@ def train_cycle(
                 val_metric.append(val_epoch_metric)
 #             val_loss.append(val_epoch_loss / val_count)
 #             val_metric.append(val_epoch_metric / val_count)
-            print(f'val_loss: {np.mean(val_loss[-val_count:])}\nval_metric: {np.mean(val_metric[-val_count:])}\n'
-                  f'val time spent: {time.time() - start:.2f}\n')
+            print(
+                f'val_loss: {np.mean(val_loss[-val_count:])}\nval_metric: {np.mean(val_metric[-val_count:])}\n'
+                f'best_metric so far: {best_metric}'
+                f'val time spent: {time.time() - start:.2f}\n'
+            )
             
             if np.mean(val_metric[-val_count:]) > best_metric:
-                best_metric = val_metric[-1]
+                best_metric = np.mean(val_metric[-val_count:])
                 torch.save(model.state_dict(), f'{name}.pth')
                 print('Current model saved.\n')
 

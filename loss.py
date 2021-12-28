@@ -6,8 +6,6 @@ from .utils import make_heatmap
 
 EPS = 1e-6
 
-torch.autograd.set_detect_anomaly(True)
-
 
 def focal_loss(pred, truth, mask, alpha, beta):
     """
@@ -61,7 +59,7 @@ def size_loss(pred, truth, mask):
 
 def center_net_loss(
         pred_heatmap, pred_offset, pred_size,
-        mask, size_tensor,
+        heatmap, mask, size_tensor,
         device='cuda' if torch.cuda.is_available() else 'cpu',
         alpha=2, beta=4,
         lambd_offset=1, lambd_size=0.1,
@@ -80,42 +78,42 @@ def center_net_loss(
     :param downsampling_ratio:
     :return:
     """
-
-    idxs = (mask == 1).nonzero(as_tuple=True)
+    
+    idxs = (mask == 1).nonzero()
     # get downsampled indexes
     idxs_strided = (
-        idxs[0], idxs[1],
-        (idxs[2].double() / downsampling_ratio).floor().long(),
-        (idxs[3].double() / downsampling_ratio).floor().long()
+        idxs[:, 0], idxs[:, 1],
+        (idxs[:, 2].double() / downsampling_ratio).floor().long(),
+        (idxs[:, 3].double() / downsampling_ratio).floor().long()
     )
     mask_strided = torch.zeros([
         mask.shape[0], mask.shape[1],
         mask.shape[2] // downsampling_ratio,
         mask.shape[3] // downsampling_ratio
-    ]).to(device)
+    ], device=device)
     mask_strided[idxs_strided] = 1
 
     real_offsets = torch.zeros([
         mask.shape[0], 2,
         mask.shape[2] // downsampling_ratio,
         mask.shape[3] // downsampling_ratio
-    ]).to(device)
+    ], device=device)
     real_offsets[:, 0, idxs_strided[2], idxs_strided[3]] = \
-        idxs[2].float() / downsampling_ratio - idxs_strided[2]
+        idxs[:, 2].float() / downsampling_ratio - idxs_strided[2]
     real_offsets[:, 1, idxs_strided[2], idxs_strided[3]] = \
-        idxs[3].float() / downsampling_ratio - idxs_strided[3]
+        idxs[:, 3].float() / downsampling_ratio - idxs_strided[3]
     
     downsampled_size = torch.zeros([
         mask.shape[0], 2,
         mask.shape[2] // downsampling_ratio,
         mask.shape[3] // downsampling_ratio
-    ]).to(device)
-    downsampled_size[idxs[0], 0, idxs_strided[2], idxs_strided[3]] = \
-        size_tensor[idxs[0], 0, idxs[2], idxs[3]].float() / downsampling_ratio
-    downsampled_size[idxs[0], 1, idxs_strided[2], idxs_strided[3]] = \
-        size_tensor[idxs[0], 1, idxs[2], idxs[3]].float() / downsampling_ratio
+    ], device=device)
+    downsampled_size[idxs[:, 0], 0, idxs_strided[2], idxs_strided[3]] = \
+        size_tensor[idxs[:, 0], 0, idxs[:, 2], idxs[:, 3]].float() / downsampling_ratio
+    downsampled_size[idxs[:, 0], 1, idxs_strided[2], idxs_strided[3]] = \
+        size_tensor[idxs[:, 0], 1, idxs[:, 2], idxs[:, 3]].float() / downsampling_ratio
 
-    focal = focal_loss(pred_heatmap, make_heatmap(mask_strided, size_tensor), mask_strided, alpha, beta)
+    focal = focal_loss(pred_heatmap, heatmap, mask_strided, alpha, beta)
 
     # merged mask without respect to classes for size and offset
     merged_mask = (mask_strided.sum(dim=1)[:, None, :, :] > 0).float().repeat(1, 2, 1, 1)
