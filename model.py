@@ -10,7 +10,7 @@ class CenterNet(nn.Module):
     def __init__(
         self, n_classes, 
         resnet=18, pretrained=False,
-        device='cuda' if torch.cuda.is_available() else 'cpu'
+        device='cuda'# if torch.cuda.is_available() else 'cpu'
     ):
         super(CenterNet, self).__init__()
 
@@ -119,7 +119,7 @@ class CenterNet(nn.Module):
         # containing [batch_num, class_num, x_min, y_min, x_max, y_max]
         return torch.cat([
             indices[0].reshape(-1, 1), 
-            torch.tensor(classes).to(self.device).reshape(-1, 1), 
+            torch.tensor(classes, device=self.device).reshape(-1, 1), 
             4 * lower_xs.reshape(-1, 1), 
             4 * lower_ys.reshape(-1, 1), 
             4 * upper_xs.reshape(-1, 1), 

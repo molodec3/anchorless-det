@@ -17,15 +17,14 @@ def focal_loss(pred, truth, mask, alpha, beta):
     :return: focal loss
     """
 
-    pos_labels = mask == 1
-    neg_labels = mask != 1
+    pos_loss = (torch.pow(1 - pred, alpha) * torch.log(pred) * mask).sum()
+    neg_loss = (torch.pow(1 - truth, beta) * torch.pow(pred, alpha) * torch.log(1 - pred) * (1 - mask)).sum()
 
-    loss = torch.pow(1 - pred, alpha) * torch.log(pred) * pos_labels
-    loss += torch.pow(1 - truth, beta) * torch.pow(pred, alpha) * torch.log(1 - pred) * neg_labels
-
-    loss = -loss.sum()
-    if pos_labels.sum() != 0:
-        loss /= pos_labels.sum()
+    non_zero_count = mask.sum()
+    if non_zero_count == 0:
+        loss = -neg_loss
+    else:
+        loss = -(pos_loss + neg_loss) / non_zero_count
 
     return loss
 
@@ -38,8 +37,7 @@ def offset_loss(pred, truth, mask):
     :return: offset_loss
     """
 
-    pos_labels = mask == 1
-    loss = torch.abs(pred[pos_labels] - truth[pos_labels]).sum() / (pos_labels.sum() + EPS)
+    loss = torch.abs((pred - truth) * mask).sum() / (mask.sum() + EPS)
 
     return loss
 
@@ -51,16 +49,14 @@ def size_loss(pred, truth, mask):
     :param mask: truth mask
     :return: size_loss
     """
-    pos_labels = mask == 1
-    loss = torch.abs(pred[pos_labels] - truth[pos_labels]).sum() / (pos_labels.sum() + EPS)
+    loss = torch.abs((pred - truth) * mask).sum() / (mask.sum() + EPS)
 
     return loss
 
 
 def center_net_loss(
         pred_heatmap, pred_offset, pred_size,
-        heatmap, mask, size_tensor,
-        device='cuda' if torch.cuda.is_available() else 'cpu',
+        heatmap, mask, size_tensor, offset_tensor,
         alpha=2, beta=4,
         lambd_offset=1, lambd_size=0.1,
         downsampling_ratio=4
@@ -78,48 +74,17 @@ def center_net_loss(
     :param downsampling_ratio:
     :return:
     """
-    
-    idxs = (mask == 1).nonzero()
-    # get downsampled indexes
-    idxs_strided = (
-        idxs[:, 0], idxs[:, 1],
-        (idxs[:, 2].double() / downsampling_ratio).floor().long(),
-        (idxs[:, 3].double() / downsampling_ratio).floor().long()
-    )
-    mask_strided = torch.zeros([
-        mask.shape[0], mask.shape[1],
-        mask.shape[2] // downsampling_ratio,
-        mask.shape[3] // downsampling_ratio
-    ], device=device)
-    mask_strided[idxs_strided] = 1
-
-    real_offsets = torch.zeros([
-        mask.shape[0], 2,
-        mask.shape[2] // downsampling_ratio,
-        mask.shape[3] // downsampling_ratio
-    ], device=device)
-    real_offsets[:, 0, idxs_strided[2], idxs_strided[3]] = \
-        idxs[:, 2].float() / downsampling_ratio - idxs_strided[2]
-    real_offsets[:, 1, idxs_strided[2], idxs_strided[3]] = \
-        idxs[:, 3].float() / downsampling_ratio - idxs_strided[3]
-    
-    downsampled_size = torch.zeros([
-        mask.shape[0], 2,
-        mask.shape[2] // downsampling_ratio,
-        mask.shape[3] // downsampling_ratio
-    ], device=device)
-    downsampled_size[idxs[:, 0], 0, idxs_strided[2], idxs_strided[3]] = \
-        size_tensor[idxs[:, 0], 0, idxs[:, 2], idxs[:, 3]].float() / downsampling_ratio
-    downsampled_size[idxs[:, 0], 1, idxs_strided[2], idxs_strided[3]] = \
-        size_tensor[idxs[:, 0], 1, idxs[:, 2], idxs[:, 3]].float() / downsampling_ratio
-
-    focal = focal_loss(pred_heatmap, heatmap, mask_strided, alpha, beta)
+    if isinstance(alpha, int):
+        alpha = torch.tensor(alpha, device='cuda')
+    if isinstance(beta, int):
+        beta = torch.tensor(beta, device='cuda')
+    focal = focal_loss(pred_heatmap, heatmap, mask, alpha, beta)
 
     # merged mask without respect to classes for size and offset
-    merged_mask = (mask_strided.sum(dim=1)[:, None, :, :] > 0).float().repeat(1, 2, 1, 1)
+    merged_mask = mask.sum(dim=1, keepdim=True)
 
-    offset = offset_loss(pred_offset, real_offsets, merged_mask)
+    offset = offset_loss(pred_offset, offset_tensor, merged_mask)
 
-    size = size_loss(pred_size, downsampled_size, merged_mask)
+    size = size_loss(pred_size, size_tensor, merged_mask)
     
     return focal + lambd_offset * offset + lambd_size * size

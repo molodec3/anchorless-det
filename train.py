@@ -14,7 +14,7 @@ def train_cycle(
     model, optimizer, 
     train_data_gen, val_data_gen,# n_classes,
     thr_val=0.5,
-    epochs=100, name='centernet'
+    epochs=100, name='centernet', device='cuda'
 ):
     train_loss = []
     val_loss = []
@@ -22,10 +22,7 @@ def train_cycle(
     
     best_metric = 0
     
-    device = 'cuda' if torch.cuda.is_available() else 'cpu'
-
-    model = model.to(device)
-    model.device = device
+#     device = 'cuda' if torch.cuda.is_available() else 'cpu'
 
     total_time = time.time()
     for epoch in range(epochs):
@@ -38,60 +35,58 @@ def train_cycle(
         
         model.train()
         start = time.time()
-        for img, heatmap, mask, size in tqdm(train_data_gen):
-            img = img.to(device)
-            heatmap = heatmap.to(device)
-            mask = mask.to(device)
-            size = size.to(device)
+        for img, heatmap, mask, size, offset in tqdm(train_data_gen):
+            img = img.to(device, non_blocking=True)
+            heatmap = heatmap.to(device, non_blocking=True)
+            mask = mask.to(device, non_blocking=True)
+            size = size.to(device, non_blocking=True)
+            offset = offset.to(device, non_blocking=True)
+            
             optimizer.zero_grad()
             
             pred_hm, pred_offset, pred_size = model(img)
             loss = center_net_loss(
                 pred_hm, pred_offset, pred_size,
-                heatmap, mask, size
+                heatmap, mask, size, offset
             )
             
             loss.backward()
             optimizer.step()
             
-#             train_epoch_loss += loss.cpu().data.numpy()
-            train_epoch_loss = loss.cpu().data.numpy()
+            train_epoch_loss = loss.detach().cpu().item()
             train_count += 1
             
             train_loss.append(train_epoch_loss)
-#         train_loss.append(train_epoch_loss / train_count)
+            
         print(f'Epoch: {epoch + 1} of {epochs}\ntrain loss: {np.mean(train_loss[-train_count:])}\n'
               f'train time spent: {time.time() - start:.2f}')
 
         start = time.time()
         model.eval()
         with torch.no_grad():
-            for img, heatmap, mask, size, bin_mask in tqdm(val_data_gen):
-                img = img.to(device)
-                heatmap = heatmap.to(device)
-                mask = mask.to(device)
-                size = size.to(device)
-                bin_mask = bin_mask.to(device)
+            for img, heatmap, mask, size, offset, bin_mask in tqdm(val_data_gen):
+                img = img.to(device, non_blocking=True)
+                heatmap = heatmap.to(device, non_blocking=True)
+                mask = mask.to(device, non_blocking=True)
+                size = size.to(device, non_blocking=True)
+                offset = offset.to(device, non_blocking=True)
+                bin_mask = bin_mask.to(device, non_blocking=True)
             
                 pred_hm, pred_offset, pred_size = model(img)
                 loss = center_net_loss(
                     pred_hm, pred_offset, pred_size,
-                    heatmap, mask, size
+                    heatmap, mask, size, offset
                 )
             
                 pred = model.predict(img, thr=thr_val)  # make_bin_mask might not work due to different devices
-                iou = calculate_iou(bin_mask, make_bin_mask(pred, bin_mask.shape).to(device))
+                iou = calculate_iou(bin_mask, make_bin_mask(pred, bin_mask.shape, 'cuda' if torch.cuda.is_available() else 'cpu'))
                 
-                val_epoch_loss = loss.cpu().data.numpy()
-                val_epoch_metric = iou.cpu().data.numpy()
-#                 val_epoch_loss += loss.cpu().data.numpy()
-#                 val_epoch_metric += iou.cpu().data.numpy()
+                val_epoch_loss = loss.detach().cpu().item()
+                val_epoch_metric = iou.detach().cpu().item()
                 val_count += 1
                 
                 val_loss.append(val_epoch_loss)
                 val_metric.append(val_epoch_metric)
-#             val_loss.append(val_epoch_loss / val_count)
-#             val_metric.append(val_epoch_metric / val_count)
             print(
                 f'val_loss: {np.mean(val_loss[-val_count:])}\nval_metric: {np.mean(val_metric[-val_count:])}\n'
                 f'best_metric so far: {best_metric}'

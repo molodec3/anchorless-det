@@ -4,6 +4,8 @@ import numpy as np
 
 import time
 
+from torchvision.utils import draw_bounding_boxes, make_grid
+
 EPS = 1e-6
 
 def make_heatmap_unused(mask, size_tensor):
@@ -85,8 +87,8 @@ def visualize_heatmap(dataset, idx=None):
     plt.show()
     
     
-def make_bin_mask(pred, im_shape):
-    out = torch.zeros(im_shape)
+def make_bin_mask(pred, im_shape, device):
+    out = torch.zeros(im_shape, device=device)
     for b, c, x_min, y_min, x_max, y_max in pred:
         out[int(b), int(c), int(y_min):int(y_max), int(x_min):int(x_max)] = 1
     
@@ -105,13 +107,136 @@ def make_bboxes(pred, im_shape):
 
 
 def calculate_iou(true_mask, pred_mask):
-    inter = (true_mask * pred_mask > 0).sum()
-    union = (true_mask + pred_mask > 0).sum()
+    inter = ((true_mask * pred_mask) > 0).sum()
+    union = ((true_mask + pred_mask) > 0).sum()
     return inter / union
 
 
-def visualize_prediction(pred):
-    pass
+def visualize_batch(model, test_data, count=16, thr=0.3, device='cuda', need_heatmap=False):
+    inv_normalize = transforms.Normalize(
+                mean=[-0.485/0.229, -0.456/0.224, -0.406/0.255],
+                std=[1/0.229, 1/0.224, 1/0.255]
+            )
+    hm_resize = transforms.Resize(512)
+
+    test_data.return_coords = True
+    test_data.bin_mask = False
+    
+    plt.figure(figsize=(count * 12, count * 8))
+    with torch.no_grad():
+        for i, data in enumerate(test_data):
+            if i >= count:
+                break
+            img = data[0].to(device)
+            pred = model.predict(img.unsqueeze(0), thr=thr).to('cpu')
+            
+            img_true = (torch.clamp(inv_normalize(img.to('cpu')), 0, 1) * 255).to(torch.uint8)
+            img_pred = (torch.clamp(inv_normalize(img.to('cpu')), 0, 1) * 255).to(torch.uint8)
+            if need_heatmap:
+                img_true = torch.div(img_true, 2, rounding_mode='floor') + \
+                    torch.div((hm_resize(data[1]) * 255).to(torch.uint8), 2, rounding_mode='floor'),
+                hm, _, _ = model(img.unsqueeze(0))
+                img_pred = torch.div(img_pred, 2, rounding_mode='floor') + \
+                    torch.div((hm_resize(hm[0]).to('cpu') * 255).to(torch.uint8), 2, rounding_mode='floor'),
+                
+            img_pred = draw_bounding_boxes(
+                img_pred[0],
+                pred[:, 2:],
+                [str(e) for e in pred[:, 1].to(int).tolist()],
+                width=2,
+                colors='red'
+            )
+            img_true = draw_bounding_boxes(
+                img_true[0],
+                data[2][:, 1:],
+                [str(e) for e in data[2][:, 0].to(int).tolist()],
+                width=2,
+                colors='red'
+            )
+            plt.subplot(count, 1, i + 1)
+            plt.imshow(make_grid([img_true, img_pred], nrow=2).permute(1, 2, 0))
+    plt.title('true/pred')
+    plt.show()
+    
+    test_data.return_coords = False
+    test_data.bin_mask = True
+    
+    
+def find_jaccard_overlap(set_1, set_2):
+    """
+    Find the Jaccard Overlap (IoU) of every box combination between two sets of boxes that are in boundary coordinates.
+    :param set_1: set 1, a tensor of dimensions (n1, 4)
+    :param set_2: set 2, a tensor of dimensions (n2, 4)
+    :return: Jaccard Overlap of each of the boxes in set 1 with respect to each of the boxes in set 2, a tensor of dimensions (n1, n2)
+    """
+
+    # Find intersections
+    intersection = find_intersection(set_1, set_2)  # (n1, n2)
+
+    # Find areas of each box in both sets
+    areas_set_1 = (set_1[:, 2] - set_1[:, 0]) * (set_1[:, 3] - set_1[:, 1])  # (n1)
+    areas_set_2 = (set_2[:, 2] - set_2[:, 0]) * (set_2[:, 3] - set_2[:, 1])  # (n2)
+
+    # Find the union
+    # PyTorch auto-broadcasts singleton dimensions
+    union = areas_set_1.unsqueeze(1) + areas_set_2.unsqueeze(0) - intersection  # (n1, n2)
+
+    return intersection / union  # (n1, n2)
+
+
+class ConfusionMatrix:
+    def __init__(self, num_classes: int, IOU_THRESHOLD=0.5):
+        self.matrix = np.zeros((num_classes + 1, num_classes + 1))
+        self.num_classes = num_classes
+        self.IOU_THRESHOLD = IOU_THRESHOLD
+
+    def process_batch(self, det_boxes, det_labels, true_boxes, true_labels):
+        """
+        Return intersection-over-union (Jaccard index) of boxes.
+        Both sets of boxes are expected to be in (x1, y1, x2, y2) format.
+        Arguments:
+            detections (Array[N, 5]), class, x1, y1, x2, y2
+            labels (Array[M, 5]), class, x1, y1, x2, y2
+        Returns:
+            None, updates confusion matrix accordingly
+        """
+        all_ious = find_jaccard_overlap(true_boxes, det_boxes).cpu().detach().numpy()
+        want_idx = np.where(all_ious > self.IOU_THRESHOLD)
+
+        all_matches = [[want_idx[0][i], want_idx[1][i], all_ious[want_idx[0][i], want_idx[1][i]]]
+                       for i in range(want_idx[0].shape[0])]
+
+        all_matches = np.array(all_matches)
+        if all_matches.shape[0] > 0:  # if there is match
+            all_matches = all_matches[all_matches[:, 2].argsort()[::-1]]
+
+            all_matches = all_matches[np.unique(all_matches[:, 1], return_index=True)[1]]
+
+            all_matches = all_matches[all_matches[:, 2].argsort()[::-1]]
+
+            all_matches = all_matches[np.unique(all_matches[:, 0], return_index=True)[1]]
+
+        for i, label in enumerate(true_labels):
+            gt_class = true_labels[i]
+            if all_matches.shape[0] > 0 and all_matches[all_matches[:, 0] == i].shape[0] == 1:
+                detection_class = det_labels[int(all_matches[all_matches[:, 0] == i, 1][0])]
+                self.matrix[detection_class, gt_class] += 1
+            else:
+                self.matrix[self.num_classes, gt_class] += 1
+
+        for i, detection in enumerate(det_labels):
+            if all_matches.shape[0] and all_matches[all_matches[:, 1] == i].shape[0] == 0:
+                detection_class = det_labels[i]
+                self.matrix[detection_class, self.num_classes] += 1
+
+    def get_matrix(self):
+        return self.matrix
+    
+    def get_precision(self):
+        return cm.matrix.diagonal() / cm.matrix.sum(axis=1)
+    
+    def get_recall(self):
+        return cm.matrix.diagonal() / cm.matrix.sum(axis=0)
 
 
 if __name__ == '__main__':
